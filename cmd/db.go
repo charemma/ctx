@@ -53,13 +53,13 @@ func init() {
 	rootCmd.AddCommand(dbCmd)
 }
 
-func openStore(ctx context.Context) (*store.PostgresStore, error) {
+func openStore(ctx context.Context) (store.StoreWithExtras, error) {
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
-	s, err := store.NewPostgresStore(ctx, cfg.Database.URL)
+	s, err := store.New(ctx, cfg.Database)
 	if err != nil {
 		return nil, fmt.Errorf("connecting to database: %w", err)
 	}

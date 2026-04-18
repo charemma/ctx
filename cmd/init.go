@@ -31,8 +31,8 @@ func runInit(_ *cobra.Command, _ []string) error {
 
 	vaultPath := detectObsidianVault()
 	embeddingProvider := "openai"
-	dbMode := "docker"
-	dbURL := "postgres://ctx:ctx@localhost:5432/ctx?sslmode=disable"
+	dbMode := "sqlite"
+	dbURL := ""
 
 	if vaultPath != "" {
 		cfg.Sources = []config.SourceConfig{
@@ -47,7 +47,9 @@ func runInit(_ *cobra.Command, _ []string) error {
 	}
 
 	// Apply wizard results to config.
-	cfg.Database.URL = dbURL
+	if dbMode == "postgres-docker" || dbMode == "postgres-custom" {
+		cfg.Database.URL = dbURL
+	}
 	cfg.Embedding.Provider = embeddingProvider
 	if embeddingProvider == "ollama" {
 		cfg.Embedding.Model = "nomic-embed-text"
@@ -64,7 +66,7 @@ func runInit(_ *cobra.Command, _ []string) error {
 	}
 
 	// Start Docker if requested.
-	if dbMode == "docker" {
+	if dbMode == "postgres-docker" {
 		if err := startDockerDB(); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "%s %v\n", warnStyle.Render("Could not start Docker database:"), err)
 			_, _ = fmt.Fprintln(os.Stderr, "You can start it manually with: docker compose up -d")
@@ -85,7 +87,7 @@ func runInit(_ *cobra.Command, _ []string) error {
 
 	// Run migrations.
 	ctx := context.Background()
-	s, err := store.NewPostgresStore(ctx, cfg.Database.URL)
+	s, err := store.New(ctx, cfg.Database)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "%s %v\n", warnStyle.Render("Could not connect to database:"), err)
 		_, _ = fmt.Fprintln(os.Stderr, "Run 'ctx db migrate' after the database is available.")
@@ -149,10 +151,11 @@ func runInitWizard(cfg *config.Config, vaultPath *string, embeddingProvider *str
 
 	// Step 3: Database.
 	err = huh.NewSelect[string]().
-		Title("Database setup").
+		Title("Database backend").
 		Options(
-			huh.NewOption("Docker (auto-start pgvector container)", "docker"),
-			huh.NewOption("Custom URL (existing Postgres)", "custom"),
+			huh.NewOption("SQLite (embedded, no setup)", "sqlite"),
+			huh.NewOption("PostgreSQL via Docker (auto-start pgvector container)", "postgres-docker"),
+			huh.NewOption("PostgreSQL custom URL (existing instance)", "postgres-custom"),
 		).
 		Value(dbMode).
 		Run()
@@ -160,7 +163,11 @@ func runInitWizard(cfg *config.Config, vaultPath *string, embeddingProvider *str
 		return fmt.Errorf("database prompt: %w", err)
 	}
 
-	if *dbMode == "custom" {
+	if *dbMode == "postgres-docker" {
+		*dbURL = "postgres://ctx:ctx@localhost:5432/ctx?sslmode=disable"
+	}
+	if *dbMode == "postgres-custom" {
+		*dbURL = "postgres://ctx:ctx@localhost:5432/ctx?sslmode=disable"
 		err = huh.NewInput().
 			Title("Database URL").
 			Description("PostgreSQL connection string").

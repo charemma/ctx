@@ -66,7 +66,7 @@ func runSearch(_ *cobra.Command, args []string) error {
 	queryVec := embedder.ToVector(embeddings[0])
 
 	// Connect to store and search.
-	s, err := store.NewPostgresStore(ctx, cfg.Database.URL)
+	s, err := store.New(ctx, cfg.Database)
 	if err != nil {
 		return fmt.Errorf("connecting to database: %w", err)
 	}

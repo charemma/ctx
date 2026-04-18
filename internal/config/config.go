@@ -16,8 +16,11 @@ type Config struct {
 }
 
 // DatabaseConfig holds database connection settings.
+// If URL is set (postgres://...), Postgres is used.
+// Otherwise, SQLite is used with the file at Path (default: ~/.config/ctx/ctx.db).
 type DatabaseConfig struct {
-	URL string `yaml:"url"`
+	URL  string `yaml:"url,omitempty"`
+	Path string `yaml:"path,omitempty"`
 }
 
 // EmbeddingConfig holds embedding provider settings.
@@ -66,11 +69,10 @@ func Save(cfg *Config, path string) error {
 }
 
 // DefaultConfig returns the default configuration.
+// Uses SQLite by default (no URL set, Path defaults to ~/.config/ctx/ctx.db).
 func DefaultConfig() *Config {
 	return &Config{
-		Database: DatabaseConfig{
-			URL: "postgres://localhost:5432/ctx?sslmode=disable",
-		},
+		Database: DatabaseConfig{},
 		Embedding: EmbeddingConfig{
 			Provider: "openai",
 			Model:    "text-embedding-3-small",

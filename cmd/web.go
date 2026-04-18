@@ -38,7 +38,7 @@ func runWeb(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	st, err := store.NewPostgresStore(ctx, cfg.Database.URL)
+	st, err := store.New(ctx, cfg.Database)
 	if err != nil {
 		return fmt.Errorf("connecting to database: %w", err)
 	}

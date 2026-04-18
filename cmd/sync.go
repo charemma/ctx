@@ -39,7 +39,7 @@ func runSync(_ *cobra.Command, args []string) error {
 		return nil
 	}
 
-	s, err := store.NewPostgresStore(ctx, cfg.Database.URL)
+	s, err := store.New(ctx, cfg.Database)
 	if err != nil {
 		return fmt.Errorf("connecting to database: %w", err)
 	}
@@ -77,7 +77,7 @@ func runSync(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func syncSource(ctx context.Context, s *store.PostgresStore, srcCfg config.SourceConfig) error {
+func syncSource(ctx context.Context, s store.Store, srcCfg config.SourceConfig) error {
 	_, _ = fmt.Fprintf(os.Stdout, "%s %s (%s)\n", headerStyle.Render("Syncing"), srcCfg.Name, srcCfg.Location)
 
 	// Ensure source record exists in DB.
@@ -105,7 +105,7 @@ func syncSource(ctx context.Context, s *store.PostgresStore, srcCfg config.Sourc
 	}
 }
 
-func syncObsidian(ctx context.Context, s *store.PostgresStore, srcCfg config.SourceConfig) error {
+func syncObsidian(ctx context.Context, s store.Store, srcCfg config.SourceConfig) error {
 	op := obsidian.New(srcCfg.Name, srcCfg.Location, nil)
 	stats, err := op.Sync(ctx, s)
 	if err != nil {
@@ -141,7 +141,7 @@ func syncObsidian(ctx context.Context, s *store.PostgresStore, srcCfg config.Sou
 	return nil
 }
 
-func getSourceID(ctx context.Context, s *store.PostgresStore, name string) (uuid.UUID, error) {
+func getSourceID(ctx context.Context, s store.Store, name string) (uuid.UUID, error) {
 	src, err := s.GetSourceByName(ctx, name)
 	if err != nil {
 		return uuid.Nil, err
@@ -152,7 +152,7 @@ func getSourceID(ctx context.Context, s *store.PostgresStore, name string) (uuid
 	return src.ID, nil
 }
 
-func embedChunks(ctx context.Context, s *store.PostgresStore, embCfg config.EmbeddingConfig) error {
+func embedChunks(ctx context.Context, s store.Store, embCfg config.EmbeddingConfig) error {
 	chunks, err := s.GetUnembeddedChunks(ctx, 0)
 	if err != nil {
 		return fmt.Errorf("getting unembedded chunks: %w", err)

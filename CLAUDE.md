@@ -11,7 +11,7 @@ The core concept is a bidirectional knowledge store: not just read-only search, 
 ## Tech stack
 
 - Go (single binary for CLI, MCP server, and web UI)
-- Postgres + pgvector (knowledge store with vector search)
+- SQLite (default, embedded via modernc.org/sqlite, pure Go) or Postgres + pgvector (optional, for teams/enterprise)
 - Cobra (CLI framework)
 - Charmbracelet (lipgloss, huh) for terminal UI
 - templ + htmx for web UI (planned)
@@ -47,11 +47,17 @@ cmd/                  -- Cobra commands
   db.go               -- db subcommand group (migrate, reset, status)
 internal/
   config/             -- configuration loading (~/.config/ctx/ctx.yaml)
-  store/              -- knowledge store (Postgres + pgvector)
+  store/              -- knowledge store (pluggable backend)
     store.go          -- Store interface and model types
-    postgres.go       -- PostgresStore implementation (pgx/v5 pool)
-    postgres_test.go  -- integration tests (requires running Postgres)
-    migrations/       -- embedded SQL migrations (embed.FS)
+    factory.go        -- store.New() factory, StoreWithExtras interface
+    sqlite.go         -- SQLiteStore (default, pure Go, brute-force vector search)
+    sqlite_test.go    -- SQLite tests (always run, no external deps)
+    postgres.go       -- PostgresStore (pgx/v5 pool, pgvector)
+    postgres_test.go  -- Postgres integration tests (requires running Postgres)
+    vector.go         -- cosine similarity, embedding JSON serialization
+    vector_test.go    -- vector math unit tests
+    migrations/       -- embedded Postgres SQL migrations
+    migrations_sqlite/ -- embedded SQLite SQL migrations
   search/             -- semantic search engine
     search.go         -- Engine type, Query/Result types, vector similarity search
     search_test.go    -- unit tests with mock store and embedder
@@ -66,21 +72,24 @@ docs/
 ## Key conventions
 
 - Config file: `~/.config/ctx/ctx.yaml` (overridable via `--config` flag or `CTX_HOME` env var)
+- Default database: SQLite at `~/.config/ctx/ctx.db` (zero setup). Set `database.url` to a postgres:// URL to use Postgres instead.
 - Environment overrides: `CTX_DATABASE_URL`, `CTX_HOME`, `OPENAI_API_KEY`
 - Tests use `CTX_HOME` pointed at `t.TempDir()` to isolate state
 - Version info injected via ldflags (`-X main.version=...`)
 
 ## Store layer
 
-The `internal/store` package provides the persistence layer:
+The `internal/store` package provides the persistence layer with a pluggable backend:
 
 - `Store` interface defines all data operations (sources, documents, chunks, sync state)
-- `PostgresStore` implements Store using pgx/v5 connection pool
-- SQL migrations are embedded via `embed.FS` and applied automatically
-- Migration runner creates a `schema_migrations` table to track applied versions
-- Store integration tests require a running Postgres with pgvector; set `CTX_TEST_DATABASE_URL` or use the default `postgres://ctx:ctx@localhost:5432/ctx?sslmode=disable`
+- `StoreWithExtras` extends Store with CLI-specific methods (MigrationStatus, TableCounts, DropAll)
+- `store.New(ctx, cfg)` factory selects the backend based on config (SQLite by default, Postgres if URL is set)
+- **SQLiteStore** (default): pure Go via modernc.org/sqlite, stores embeddings as JSON text, brute-force cosine similarity search in Go. No external dependencies. Tests always run.
+- **PostgresStore**: pgx/v5 connection pool, pgvector for vector search. Integration tests require a running Postgres; set `CTX_TEST_DATABASE_URL` or use the default.
+- SQL migrations are embedded via `embed.FS` and applied automatically (separate migration sets for each backend)
 - Model types are plain structs (Source, Document, Chunk, SyncState, IngestEntry)
-- pgvector-go is used for vector embedding types
+- pgvector-go is used for vector embedding types in the Store interface
+- Vector math helpers in `vector.go`: CosineSimilarity, ParseEmbedding, SerializeEmbedding
 
 ## Search layer
 
