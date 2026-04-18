@@ -39,8 +39,14 @@ main.go              -- entry point, version injection via ldflags
 cmd/                  -- Cobra commands
   root.go             -- root command, global flags (--config)
   version.go          -- version subcommand
+  db.go               -- db subcommand group (migrate, reset, status)
 internal/
   config/             -- configuration loading (~/.config/ctx/ctx.yaml)
+  store/              -- knowledge store (Postgres + pgvector)
+    store.go          -- Store interface and model types
+    postgres.go       -- PostgresStore implementation (pgx/v5 pool)
+    postgres_test.go  -- integration tests (requires running Postgres)
+    migrations/       -- embedded SQL migrations (embed.FS)
 docs/
   decisions/          -- Architecture Decision Records
 ```
@@ -51,3 +57,21 @@ docs/
 - Environment overrides: `CTX_DATABASE_URL`, `CTX_HOME`, `OPENAI_API_KEY`
 - Tests use `CTX_HOME` pointed at `t.TempDir()` to isolate state
 - Version info injected via ldflags (`-X main.version=...`)
+
+## Store layer
+
+The `internal/store` package provides the persistence layer:
+
+- `Store` interface defines all data operations (sources, documents, chunks, sync state)
+- `PostgresStore` implements Store using pgx/v5 connection pool
+- SQL migrations are embedded via `embed.FS` and applied automatically
+- Migration runner creates a `schema_migrations` table to track applied versions
+- Store integration tests require a running Postgres with pgvector; set `CTX_TEST_DATABASE_URL` or use the default `postgres://ctx:ctx@localhost:5432/ctx?sslmode=disable`
+- Model types are plain structs (Source, Document, Chunk, SyncState, IngestEntry)
+- pgvector-go is used for vector embedding types
+
+## CLI subcommands
+
+- `ctx db migrate` -- run pending database migrations
+- `ctx db reset` -- drop all tables and re-run migrations (interactive confirmation, or `--yes` to skip)
+- `ctx db status` -- show applied/pending migrations and table row counts
