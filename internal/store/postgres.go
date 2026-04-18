@@ -475,6 +475,68 @@ func (s *PostgresStore) GetUnembeddedChunks(ctx context.Context, limit int) ([]C
 	return chunks, rows.Err()
 }
 
+// SearchChunks performs a vector similarity search with optional metadata filters.
+func (s *PostgresStore) SearchChunks(ctx context.Context, embedding pgvector.Vector, opts SearchOpts) ([]SearchResult, error) {
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+	minScore := opts.MinScore
+	if minScore <= 0 {
+		minScore = 0.3
+	}
+
+	var categoryFilter *string
+	if opts.Category != "" {
+		categoryFilter = &opts.Category
+	}
+
+	var tagsFilter []string
+	if len(opts.Tags) > 0 {
+		tagsFilter = opts.Tags
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT c.id, c.content, c.heading_path,
+		       d.id, d.source_path, d.para_category, d.tags, d.last_synced,
+		       1 - (c.embedding <=> $1) AS score
+		FROM chunks c
+		JOIN documents d ON c.document_id = d.id
+		WHERE c.embedding IS NOT NULL
+		  AND ($2::text IS NULL OR d.para_category = $2)
+		  AND ($3::text[] IS NULL OR d.tags && $3)
+		  AND 1 - (c.embedding <=> $1) > $4
+		ORDER BY c.embedding <=> $1
+		LIMIT $5
+	`, embedding, categoryFilter, tagsFilter, minScore, limit)
+	if err != nil {
+		return nil, fmt.Errorf("searching chunks: %w", err)
+	}
+	defer rows.Close()
+
+	var results []SearchResult
+	for rows.Next() {
+		var r SearchResult
+		var headingPath *string
+		var category *string
+		if err := rows.Scan(
+			&r.ChunkID, &r.Content, &headingPath,
+			&r.DocumentID, &r.SourcePath, &category, &r.Tags, &r.LastSynced,
+			&r.Score,
+		); err != nil {
+			return nil, fmt.Errorf("scanning search result: %w", err)
+		}
+		if headingPath != nil {
+			r.HeadingPath = *headingPath
+		}
+		if category != nil {
+			r.Category = *category
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
 // --- Sync State ---
 
 func (s *PostgresStore) GetSyncState(ctx context.Context, sourceID uuid.UUID) (*SyncState, error) {

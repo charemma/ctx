@@ -47,6 +47,9 @@ internal/
     postgres.go       -- PostgresStore implementation (pgx/v5 pool)
     postgres_test.go  -- integration tests (requires running Postgres)
     migrations/       -- embedded SQL migrations (embed.FS)
+  search/             -- semantic search engine
+    search.go         -- Engine type, Query/Result types, vector similarity search
+    search_test.go    -- unit tests with mock store and embedder
 docs/
   decisions/          -- Architecture Decision Records
 ```
@@ -69,6 +72,15 @@ The `internal/store` package provides the persistence layer:
 - Store integration tests require a running Postgres with pgvector; set `CTX_TEST_DATABASE_URL` or use the default `postgres://ctx:ctx@localhost:5432/ctx?sslmode=disable`
 - Model types are plain structs (Source, Document, Chunk, SyncState, IngestEntry)
 - pgvector-go is used for vector embedding types
+
+## Search layer
+
+The `internal/search` package provides semantic search over the knowledge store:
+
+- `Engine` combines a `Store` and an `Embedder` to perform vector similarity search
+- `Query` supports text search with optional PARA category and tag filters, configurable limit and minimum score
+- The store's `SearchChunks` method runs a single SQL query that joins chunks with documents, applies cosine similarity scoring via pgvector's `<=>` operator, and filters by category/tags
+- Unit tests use mock implementations of Store and Embedder -- no database required
 
 ## CLI subcommands
 

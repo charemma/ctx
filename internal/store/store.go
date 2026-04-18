@@ -30,6 +30,7 @@ type Store interface {
 	DeleteChunksByDocument(ctx context.Context, docID uuid.UUID) error
 	UpdateChunkEmbedding(ctx context.Context, chunkID uuid.UUID, embedding pgvector.Vector) error
 	GetUnembeddedChunks(ctx context.Context, limit int) ([]Chunk, error)
+	SearchChunks(ctx context.Context, embedding pgvector.Vector, opts SearchOpts) ([]SearchResult, error)
 
 	// Sync State
 	GetSyncState(ctx context.Context, sourceID uuid.UUID) (*SyncState, error)
@@ -91,6 +92,27 @@ type SyncState struct {
 	DocsSkipped int             `json:"docs_skipped"`
 	Cursor      json.RawMessage `json:"cursor"`
 	Error       *string         `json:"error"`
+}
+
+// SearchOpts configures a vector similarity search.
+type SearchOpts struct {
+	Category string
+	Tags     []string
+	Limit    int
+	MinScore float64
+}
+
+// SearchResult holds a single search hit with score and document metadata.
+type SearchResult struct {
+	ChunkID     uuid.UUID
+	Content     string
+	HeadingPath string
+	Score       float64
+	DocumentID  uuid.UUID
+	SourcePath  string
+	Category    string
+	Tags        []string
+	LastSynced  time.Time
 }
 
 // IngestEntry represents a pending write-back from an agent.

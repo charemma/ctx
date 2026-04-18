@@ -382,6 +382,132 @@ func TestDeleteDocumentsByPaths(t *testing.T) {
 	}
 }
 
+func TestSearchChunks(t *testing.T) {
+	s := setupStore(t)
+	ctx := context.Background()
+
+	src := &Source{Provider: "filesystem", Name: "search-test", Location: "/tmp/search"}
+	if err := s.CreateSource(ctx, src); err != nil {
+		t.Fatalf("creating source: %v", err)
+	}
+
+	category := "3 Resources"
+	doc := &Document{
+		SourceID:     src.ID,
+		SourcePath:   "notes/go.md",
+		ContentHash:  "h1",
+		ParaCategory: &category,
+		Tags:         []string{"go", "programming"},
+	}
+	if err := s.UpsertDocument(ctx, doc); err != nil {
+		t.Fatalf("upserting document: %v", err)
+	}
+	got, _ := s.GetDocumentByPath(ctx, src.ID, "notes/go.md")
+
+	heading := "## Introduction"
+	chunks := []Chunk{
+		{DocumentID: got.ID, ChunkIndex: 0, Content: "Go is a statically typed language", HeadingPath: &heading},
+		{DocumentID: got.ID, ChunkIndex: 1, Content: "Go was designed at Google"},
+	}
+	if err := s.CreateChunks(ctx, chunks); err != nil {
+		t.Fatalf("creating chunks: %v", err)
+	}
+
+	unembedded, err := s.GetUnembeddedChunks(ctx, 10)
+	if err != nil {
+		t.Fatalf("getting unembedded: %v", err)
+	}
+
+	// Give both chunks similar embeddings.
+	dims := 1536
+	for _, c := range unembedded {
+		vec := make([]float32, dims)
+		vec[0] = 0.5
+		vec[1] = 0.3
+		if err := s.UpdateChunkEmbedding(ctx, c.ID, pgvector.NewVector(vec)); err != nil {
+			t.Fatalf("updating embedding: %v", err)
+		}
+	}
+
+	// Search with a similar vector.
+	queryVec := make([]float32, dims)
+	queryVec[0] = 0.5
+	queryVec[1] = 0.3
+	queryEmbedding := pgvector.NewVector(queryVec)
+
+	t.Run("no filters", func(t *testing.T) {
+		results, err := s.SearchChunks(ctx, queryEmbedding, SearchOpts{})
+		if err != nil {
+			t.Fatalf("searching: %v", err)
+		}
+		if len(results) != 2 {
+			t.Fatalf("expected 2 results, got %d", len(results))
+		}
+		for _, r := range results {
+			if r.Score < 0.3 {
+				t.Errorf("score %f below default min", r.Score)
+			}
+			if r.SourcePath != "notes/go.md" {
+				t.Errorf("unexpected source path: %s", r.SourcePath)
+			}
+			if r.Category != "3 Resources" {
+				t.Errorf("unexpected category: %s", r.Category)
+			}
+		}
+	})
+
+	t.Run("category filter", func(t *testing.T) {
+		results, err := s.SearchChunks(ctx, queryEmbedding, SearchOpts{Category: "1 Projects"})
+		if err != nil {
+			t.Fatalf("searching: %v", err)
+		}
+		if len(results) != 0 {
+			t.Errorf("expected 0 results for non-matching category, got %d", len(results))
+		}
+	})
+
+	t.Run("tag filter", func(t *testing.T) {
+		results, err := s.SearchChunks(ctx, queryEmbedding, SearchOpts{Tags: []string{"go"}})
+		if err != nil {
+			t.Fatalf("searching: %v", err)
+		}
+		if len(results) != 2 {
+			t.Errorf("expected 2 results for matching tag, got %d", len(results))
+		}
+
+		results, err = s.SearchChunks(ctx, queryEmbedding, SearchOpts{Tags: []string{"nonexistent"}})
+		if err != nil {
+			t.Fatalf("searching: %v", err)
+		}
+		if len(results) != 0 {
+			t.Errorf("expected 0 results for non-matching tag, got %d", len(results))
+		}
+	})
+
+	t.Run("limit", func(t *testing.T) {
+		results, err := s.SearchChunks(ctx, queryEmbedding, SearchOpts{Limit: 1})
+		if err != nil {
+			t.Fatalf("searching: %v", err)
+		}
+		if len(results) != 1 {
+			t.Errorf("expected 1 result with limit 1, got %d", len(results))
+		}
+	})
+
+	t.Run("high min score", func(t *testing.T) {
+		results, err := s.SearchChunks(ctx, queryEmbedding, SearchOpts{MinScore: 0.9999})
+		if err != nil {
+			t.Fatalf("searching: %v", err)
+		}
+		// With identical vectors the score should be 1.0, so results should match.
+		for _, r := range results {
+			if r.Score < 0.9999 {
+				t.Errorf("score %f should be >= 0.9999", r.Score)
+			}
+		}
+	})
+}
+
 func TestTableCounts(t *testing.T) {
 	s := setupStore(t)
 	ctx := context.Background()
