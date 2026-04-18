@@ -39,6 +39,11 @@ main.go              -- entry point, version injection via ldflags
 cmd/                  -- Cobra commands
   root.go             -- root command, global flags (--config)
   version.go          -- version subcommand
+  init.go             -- init wizard (vault detection, config generation)
+  sync.go             -- sync sources and embed chunks
+  status.go           -- show system state
+  search.go           -- semantic search
+  serve.go            -- server placeholder (MCP, web)
   db.go               -- db subcommand group (migrate, reset, status)
 internal/
   config/             -- configuration loading (~/.config/ctx/ctx.yaml)
@@ -84,6 +89,11 @@ The `internal/search` package provides semantic search over the knowledge store:
 
 ## CLI subcommands
 
+- `ctx init` -- interactive setup wizard (vault detection, embedding provider, database). Supports `--yes` for non-interactive mode.
+- `ctx sync [source-name]` -- sync configured sources and embed unembedded chunks. Optional source name to sync a single source.
+- `ctx status` -- show sources, sync state, document/chunk counts, and embedding stats
+- `ctx search "query"` -- semantic search with `--category`, `--tags`, `--limit` filters
+- `ctx serve --mcp|--web` -- placeholder for MCP and web servers
 - `ctx db migrate` -- run pending database migrations
 - `ctx db reset` -- drop all tables and re-run migrations (interactive confirmation, or `--yes` to skip)
 - `ctx db status` -- show applied/pending migrations and table row counts

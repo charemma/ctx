@@ -28,9 +28,41 @@ type EmbeddingConfig struct {
 
 // SourceConfig holds a single source definition.
 type SourceConfig struct {
+	Name     string            `yaml:"name"`
 	Type     string            `yaml:"type"`
 	Location string            `yaml:"location"`
 	Metadata map[string]string `yaml:"metadata,omitempty"`
+}
+
+// ConfigDir returns the configuration directory, exported for use by commands.
+func ConfigDir() (string, error) {
+	return configDir()
+}
+
+// Save writes the configuration to the given path, or the default location.
+func Save(cfg *Config, path string) error {
+	if path == "" {
+		dir, err := configDir()
+		if err != nil {
+			return err
+		}
+		path = filepath.Join(dir, "ctx.yaml")
+	}
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshaling config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing config file: %w", err)
+	}
+	return nil
 }
 
 // DefaultConfig returns the default configuration.
