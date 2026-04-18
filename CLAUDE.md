@@ -43,7 +43,7 @@ cmd/                  -- Cobra commands
   sync.go             -- sync sources and embed chunks
   status.go           -- show system state
   search.go           -- semantic search
-  serve.go            -- server placeholder (MCP, web)
+  serve.go            -- MCP and web server launcher
   db.go               -- db subcommand group (migrate, reset, status)
 internal/
   config/             -- configuration loading (~/.config/ctx/ctx.yaml)
@@ -55,6 +55,10 @@ internal/
   search/             -- semantic search engine
     search.go         -- Engine type, Query/Result types, vector similarity search
     search_test.go    -- unit tests with mock store and embedder
+  mcp/                -- MCP server for IDE integration
+    server.go         -- server setup, stdio transport via mcp-go
+    tools.go          -- tool definitions and handlers
+    tools_test.go     -- unit tests with mock store and embedder
 docs/
   decisions/          -- Architecture Decision Records
 ```
@@ -93,7 +97,31 @@ The `internal/search` package provides semantic search over the knowledge store:
 - `ctx sync [source-name]` -- sync configured sources and embed unembedded chunks. Optional source name to sync a single source.
 - `ctx status` -- show sources, sync state, document/chunk counts, and embedding stats
 - `ctx search "query"` -- semantic search with `--category`, `--tags`, `--limit` filters
-- `ctx serve --mcp|--web` -- placeholder for MCP and web servers
+- `ctx serve --mcp` -- start MCP server on stdio (for Claude Code, Copilot, etc.)
+- `ctx serve --web` -- placeholder for web server
 - `ctx db migrate` -- run pending database migrations
 - `ctx db reset` -- drop all tables and re-run migrations (interactive confirmation, or `--yes` to skip)
 - `ctx db status` -- show applied/pending migrations and table row counts
+
+## MCP server
+
+The MCP server exposes the knowledge store to AI tools via the Model Context Protocol (stdio transport). It uses `github.com/mark3labs/mcp-go` as the SDK.
+
+Available tools:
+- `search_knowledge` -- semantic search with optional category, tags, limit, min_score filters
+- `find_decisions` -- scoped search in decision records (filters to paths containing "decisions")
+- `get_project_context` -- aggregates project notes, decisions, and journal entries
+- `search_journal` -- journal search with optional date_from/date_to range
+- `list_sources` -- shows configured sources and sync status
+
+Configure in Claude Code (`.claude/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "ctx": {
+      "command": "ctx",
+      "args": ["serve", "--mcp"]
+    }
+  }
+}
+```
