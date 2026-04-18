@@ -1,0 +1,23 @@
+# Binary
+bin/
+ctx
+
+# Go
+*.test
+*.prof
+coverage.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Nix
+.direnv/
+result
+
+# Local dev
+.env
