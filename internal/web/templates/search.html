@@ -1,0 +1,37 @@
+{{define "content"}}
+<h1>Search</h1>
+
+<form class="search-form" method="get" action="/search">
+	<input type="text" name="q" value="{{.Query}}" placeholder="Search your knowledge base..." autofocus>
+	<select name="category">
+		<option value="">All categories</option>
+		<option value="projects" {{if eq .Category "projects"}}selected{{end}}>Projects</option>
+		<option value="areas" {{if eq .Category "areas"}}selected{{end}}>Areas</option>
+		<option value="resources" {{if eq .Category "resources"}}selected{{end}}>Resources</option>
+		<option value="archive" {{if eq .Category "archive"}}selected{{end}}>Archive</option>
+	</select>
+	<input type="text" name="tags" value="{{.Tags}}" placeholder="Tags (comma-separated)" style="min-width:150px;flex:0.5">
+	<button type="submit" class="btn">Search</button>
+</form>
+
+{{if .Query}}
+	{{if .Results}}
+		<p style="color:var(--subtext0);font-size:0.9rem;margin-bottom:1rem;">{{len .Results}} results for "{{.Query}}"</p>
+		{{range .Results}}
+		<div class="result">
+			<div class="result-header">
+				<span class="score {{scoreClass .Score}}">{{printf "%.3f" .Score}}</span>
+				<span class="source-path">{{.SourcePath}}</span>
+				{{if .HeadingPath}}<span class="heading-path">{{.HeadingPath}}</span>{{end}}
+			</div>
+			<div class="snippet">{{snippet .Content}}</div>
+			<div class="synced">synced: {{.LastSynced.Format "2006-01-02 15:04"}}</div>
+		</div>
+		{{end}}
+	{{else}}
+		<div class="empty-state">No results found for "{{.Query}}".</div>
+	{{end}}
+{{else}}
+	<div class="empty-state">Enter a query to search your knowledge base.</div>
+{{end}}
+{{end}}

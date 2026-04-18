@@ -1,0 +1,49 @@
+{{define "content"}}
+<h1>Sources</h1>
+
+{{if .Flash}}<div class="flash">{{.Flash}}</div>{{end}}
+{{if .FlashError}}<div class="flash flash-error">{{.FlashError}}</div>{{end}}
+
+<div class="stats">
+	<div><span class="label">Documents:</span><span class="value">{{.TotalDocs}}</span></div>
+	<div><span class="label">Chunks:</span><span class="value">{{.TotalChunks}}</span></div>
+	<div><span class="label">Embedded:</span><span class="value">{{.Embedded}}</span></div>
+	<div><span class="label">Pending:</span><span class="value">{{.Pending}}</span></div>
+</div>
+
+{{if .Sources}}
+<table class="sources-table">
+	<thead>
+		<tr>
+			<th>Name</th>
+			<th>Type</th>
+			<th>Location</th>
+			<th>Last sync</th>
+			<th>Docs</th>
+			<th>Chunks</th>
+			<th></th>
+		</tr>
+	</thead>
+	<tbody>
+		{{range .Sources}}
+		<tr>
+			<td>{{.Name}}</td>
+			<td>{{.Provider}}</td>
+			<td style="font-family:monospace;font-size:0.85rem;">{{.Location}}</td>
+			<td>{{if .LastSync}}{{.LastSync.Format "2006-01-02 15:04"}}{{else}}never{{end}}</td>
+			<td>{{.DocsTotal}}</td>
+			<td>{{.ChunksTotal}}</td>
+			<td>
+				<form method="post" action="/sources/sync" style="display:inline;">
+					<input type="hidden" name="source" value="{{.Name}}">
+					<button type="submit" class="btn btn-sm">Sync</button>
+				</form>
+			</td>
+		</tr>
+		{{end}}
+	</tbody>
+</table>
+{{else}}
+<div class="empty-state">No sources configured. Run <code>ctx init</code> to get started.</div>
+{{end}}
+{{end}}

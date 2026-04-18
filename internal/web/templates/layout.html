@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{{.Title}} - ctx</title>
+	<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+	<nav>
+		<div class="container">
+			<span class="brand">ctx</span>
+			<div class="links">
+				<a href="/search" {{if eq .ActiveNav "search"}}class="active"{{end}}>Search</a>
+				<a href="/sources" {{if eq .ActiveNav "sources"}}class="active"{{end}}>Sources</a>
+			</div>
+		</div>
+	</nav>
+	<main>
+		<div class="container">
+			{{template "content" .}}
+		</div>
+	</main>
+</body>
+</html>
