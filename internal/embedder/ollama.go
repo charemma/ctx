@@ -55,7 +55,7 @@ func NewOllama(cfg config.EmbeddingConfig) (*Ollama, error) {
 		model:    model,
 		endpoint: endpoint,
 		dims:     dims,
-		client:   &http.Client{Timeout: 120 * time.Second},
+		client:   &http.Client{Timeout: 600 * time.Second},
 	}, nil
 }
 
