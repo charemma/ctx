@@ -8,6 +8,7 @@ import (
 
 	"github.com/charemma/ctx/internal/config"
 	"github.com/charemma/ctx/internal/embedder"
+	gh "github.com/charemma/ctx/internal/provider/github"
 	"github.com/charemma/ctx/internal/provider/obsidian"
 	"github.com/charemma/ctx/internal/store"
 	"github.com/google/uuid"
@@ -100,6 +101,8 @@ func syncSource(ctx context.Context, s store.Store, srcCfg config.SourceConfig) 
 	switch srcCfg.Type {
 	case "obsidian":
 		return syncObsidian(ctx, s, srcCfg)
+	case "github":
+		return syncGitHub(ctx, s, srcCfg)
 	default:
 		return fmt.Errorf("unsupported source type: %q", srcCfg.Type)
 	}
@@ -141,6 +144,41 @@ func syncObsidian(ctx context.Context, s store.Store, srcCfg config.SourceConfig
 	return nil
 }
 
+func syncGitHub(ctx context.Context, s store.Store, srcCfg config.SourceConfig) error {
+	cfg := gh.GHConfig{
+		IncludePRs:      true,
+		IncludeComments: true,
+		State:           "all",
+	}
+
+	// Parse provider-specific config from metadata.
+	if v, ok := srcCfg.Metadata["include_prs"]; ok && v == "false" {
+		cfg.IncludePRs = false
+	}
+	if v, ok := srcCfg.Metadata["include_comments"]; ok && v == "false" {
+		cfg.IncludeComments = false
+	}
+	if v, ok := srcCfg.Metadata["state"]; ok {
+		cfg.State = v
+	}
+
+	p := gh.New(srcCfg.Name, srcCfg.Location, cfg)
+	stats, err := p.Sync(ctx, s)
+	if err != nil {
+		return fmt.Errorf("sync failed: %w", err)
+	}
+
+	// Print summary.
+	_, _ = fmt.Fprintf(os.Stdout, "  Issues found:   %d\n", stats.FilesFound)
+	_, _ = fmt.Fprintf(os.Stdout, "  New:            %d\n", stats.FilesNew)
+	_, _ = fmt.Fprintf(os.Stdout, "  Updated:        %d\n", stats.FilesUpdated)
+	_, _ = fmt.Fprintf(os.Stdout, "  Skipped:        %d\n", stats.FilesSkipped)
+	_, _ = fmt.Fprintf(os.Stdout, "  Deleted:        %d\n", stats.FilesDeleted)
+	_, _ = fmt.Fprintf(os.Stdout, "  Chunks created: %d\n", stats.ChunksCreated)
+
+	return nil
+}
+
 func getSourceID(ctx context.Context, s store.Store, name string) (uuid.UUID, error) {
 	src, err := s.GetSourceByName(ctx, name)
 	if err != nil {
@@ -170,8 +208,8 @@ func embedChunks(ctx context.Context, s store.Store, embCfg config.EmbeddingConf
 		return fmt.Errorf("creating embedder: %w", err)
 	}
 
-	// Process in batches of 100.
-	batchSize := 100
+	// Smaller batches for local models on slower hardware.
+	batchSize := 10
 	for i := 0; i < len(chunks); i += batchSize {
 		end := i + batchSize
 		if end > len(chunks) {

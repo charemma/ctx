@@ -65,6 +65,10 @@ internal/
     server.go         -- server setup, stdio transport via mcp-go
     tools.go          -- tool definitions and handlers
     tools_test.go     -- unit tests with mock store and embedder
+  provider/           -- source providers (pluggable)
+    provider.go       -- Provider interface, SyncStats
+    obsidian/         -- Obsidian vault provider
+    github/           -- GitHub Issues/PRs provider (via gh CLI)
 docs/
   decisions/          -- Architecture Decision Records
 ```
@@ -90,6 +94,25 @@ The `internal/store` package provides the persistence layer with a pluggable bac
 - Model types are plain structs (Source, Document, Chunk, SyncState, IngestEntry)
 - pgvector-go is used for vector embedding types in the Store interface
 - Vector math helpers in `vector.go`: CosineSimilarity, ParseEmbedding, SerializeEmbedding
+
+## Providers
+
+Providers sync documents from external sources into the store. Each implements the `Provider` interface (`Sync(ctx, store) -> SyncStats`).
+
+- **Obsidian** (`internal/provider/obsidian/`): walks a local vault directory, parses frontmatter, chunks markdown, detects changes via content hashing
+- **GitHub** (`internal/provider/github/`): syncs issues and PRs from a GitHub repo via the `gh` CLI (no token config needed). Supports incremental sync via `updated_at` cursor. Issues/PRs become documents, comments become separate chunks. Labels map to tags, PARA category is always "projects".
+
+GitHub source config example:
+```yaml
+sources:
+  - name: ctx-issues
+    type: github
+    location: charemma/ctx
+    metadata:
+      include_prs: "true"
+      include_comments: "true"
+      state: all  # open, closed, all
+```
 
 ## Search layer
 

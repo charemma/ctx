@@ -1,0 +1,16 @@
+[
+  {
+    "id": 101,
+    "body": "I think we should use pgvector for this. It has great performance characteristics.",
+    "user": {"login": "reviewer"},
+    "created_at": "2026-04-01T12:00:00Z",
+    "updated_at": "2026-04-01T12:00:00Z"
+  },
+  {
+    "id": 102,
+    "body": "Agreed. Let's also add a brute-force fallback for SQLite.",
+    "user": {"login": "babis"},
+    "created_at": "2026-04-01T14:00:00Z",
+    "updated_at": "2026-04-01T14:00:00Z"
+  }
+]
