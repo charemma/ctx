@@ -1,0 +1,11 @@
+.git
+bin/
+result
+*.db
+*.sqlite
+coverage.out
+docs/
+examples/
+*.md
+!go.mod
+!go.sum

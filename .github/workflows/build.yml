@@ -1,0 +1,85 @@
+name: Build and Push Container Image
+
+on:
+  push:
+    branches: [main]
+    # Loop-break: when the bump-image-tag job below commits a new SHA into
+    # k8s/kustomization.yaml, that push must NOT re-trigger this workflow.
+    paths-ignore:
+      - 'k8s/**'
+      - 'docs/**'
+      - '**.md'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      short_sha: ${{ steps.sha.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute short SHA
+        id: sha
+        run: echo "short_sha=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  bump-image-tag:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      # Split from build-and-push so we don't hand `packages: write` and
+      # `contents: write` to the same job. Least privilege.
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install kustomize
+        run: |
+          curl -sSL -o /tmp/kustomize.tar.gz \
+            https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz
+          tar -xzf /tmp/kustomize.tar.gz -C /tmp
+          sudo mv /tmp/kustomize /usr/local/bin/kustomize
+          kustomize version
+
+      - name: Bump image tag in kustomization
+        working-directory: k8s
+        run: |
+          kustomize edit set image \
+            ghcr.io/charemma/ctx=ghcr.io/charemma/ctx:sha-${{ needs.build-and-push.outputs.short_sha }}
+
+      - name: Commit and push tag bump
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(k8s): bump image to sha-${{ needs.build-and-push.outputs.short_sha }}"
+          file_pattern: k8s/kustomization.yaml
+          commit_user_name: github-actions[bot]
+          commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
