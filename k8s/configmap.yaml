@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ctx-config
+data:
+  ctx.yaml: |
+    embedding:
+      provider: ollama
+      model: nomic-embed-text
+    # Add the sources to index here, for example an Obsidian vault mounted
+    # into the sync job or a GitHub repo.
+    sources: []

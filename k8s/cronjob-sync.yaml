@@ -1,0 +1,41 @@
+# Periodic ingest: pulls configured sources, embeds new chunks, and writes
+# them to the store. This is the workload ctx runs headless today. The
+# networked retrieval service is served separately once it lands.
+#
+# Assumes Postgres (pgvector) and Ollama are reachable as cluster services
+# (postgres:5432, ollama:11434) and that a `ctx-db` secret holds the DB URL.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ctx-sync
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          imagePullSecrets:
+            - name: ghcr-pull-secret
+          restartPolicy: OnFailure
+          containers:
+            - name: ctx
+              image: ghcr.io/charemma/ctx:latest
+              args: ["sync"]
+              env:
+                - name: CTX_HOME
+                  value: /config
+                - name: OLLAMA_HOST
+                  value: http://ollama:11434
+                - name: CTX_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: ctx-db
+                      key: url
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+          volumes:
+            - name: config
+              configMap:
+                name: ctx-config
