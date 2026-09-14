@@ -8,8 +8,8 @@ import (
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.Database.URL != "postgres://localhost:5432/ctx?sslmode=disable" {
-		t.Errorf("unexpected default database URL: %s", cfg.Database.URL)
+	if cfg.Database.URL != "" {
+		t.Errorf("expected empty database URL (SQLite default), got: %s", cfg.Database.URL)
 	}
 	if cfg.Embedding.Provider != "openai" {
 		t.Errorf("unexpected default embedding provider: %s", cfg.Embedding.Provider)
@@ -27,8 +27,8 @@ func TestLoadMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error for missing file, got: %v", err)
 	}
-	if cfg.Database.URL != "postgres://localhost:5432/ctx?sslmode=disable" {
-		t.Errorf("expected default config, got database URL: %s", cfg.Database.URL)
+	if cfg.Database.URL != "" {
+		t.Errorf("expected default config with empty database URL, got: %s", cfg.Database.URL)
 	}
 }
 
