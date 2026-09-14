@@ -13,20 +13,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	serveMCP bool
-	serveWeb bool
-)
+var serveMCP bool
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Start a ctx server (MCP or web)",
+	Short: "Start the ctx MCP server",
 	RunE:  runServe,
 }
 
 func init() {
 	serveCmd.Flags().BoolVar(&serveMCP, "mcp", false, "start MCP server (stdio transport)")
-	serveCmd.Flags().BoolVar(&serveWeb, "web", false, "start web server")
 	rootCmd.AddCommand(serveCmd)
 }
 
@@ -34,12 +30,8 @@ func runServe(_ *cobra.Command, _ []string) error {
 	if serveMCP {
 		return runMCPServer()
 	}
-	if serveWeb {
-		_, _ = fmt.Fprintln(os.Stdout, "Web server not yet implemented.")
-		return nil
-	}
 
-	_, _ = fmt.Fprintln(os.Stderr, "Specify --mcp or --web to choose a server mode.")
+	_, _ = fmt.Fprintln(os.Stderr, "Specify --mcp to start the MCP server. For the web UI, use `ctx web`.")
 	return nil
 }
 

@@ -45,7 +45,7 @@ cmd/                  -- Cobra commands
   sync.go             -- sync sources and embed chunks (batches of 10)
   status.go           -- show system state
   search.go           -- semantic search
-  serve.go            -- MCP server launcher (--web is still a placeholder)
+  serve.go            -- MCP server launcher
   web.go              -- web UI server (the real web entry point)
   db.go               -- db subcommand group (migrate, reset, status)
 internal/
@@ -147,7 +147,7 @@ The `internal/search` package provides semantic search over the knowledge store:
 - `ctx status` -- show sources, sync state, document/chunk counts, and embedding stats
 - `ctx search "query"` -- semantic search with `--category`, `--tags`, `--limit` filters
 - `ctx serve --mcp` -- start MCP server on stdio (for Claude Code, Copilot, etc.)
-- `ctx web` -- start the web UI server (`--host`, `--port`, default localhost:8080). Note: `ctx serve --web` is a leftover placeholder; the web UI lives under `ctx web`.
+- `ctx web` -- start the web UI server (`--host`, `--port`, default localhost:8080)
 - `ctx db migrate` -- run pending database migrations
 - `ctx db reset` -- drop all tables and re-run migrations (interactive confirmation, or `--yes` to skip)
 - `ctx db status` -- show applied/pending migrations and table row counts
