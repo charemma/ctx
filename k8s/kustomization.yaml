@@ -7,4 +7,4 @@ resources:
 images:
 - name: ghcr.io/charemma/ctx
   newName: ghcr.io/charemma/ctx
-  newTag: latest
+  newTag: sha-27e62fd
