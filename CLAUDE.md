@@ -1,12 +1,12 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What ctx is
 
-ctx is an AX (AI Experience) platform for enterprise knowledge. It connects scattered company knowledge from sources like Confluence, GitHub, Slack, and Jira into a structured, searchable knowledge store backed by Postgres + pgvector. It delivers context-aware results to the tools people already use -- IDEs (via MCP server), CLI (for CI/CD), chat, email, and more.
+ctx is a self-hosted knowledge platform with a frontend-agnostic core. It connects scattered knowledge (Obsidian notes, GitHub issues, and later Confluence, Jira, Slack) into a structured, searchable knowledge store and delivers context-aware results to the tools people already use -- IDEs (via MCP server), CLI (for CI/CD), and a web UI.
 
-The core concept is a bidirectional knowledge store: not just read-only search, but a living store that both humans and AI agents can read from and write to.
+The architecture separates one core (ingestion, embedding, storage, retrieval) from any number of thin clients. The core knows nothing about its clients: new sources are providers implementing one interface, new vector backends are stores implementing one interface, new clients attach to the same retrieval layer. Everything runs on your own hardware -- embeddings via local Ollama, data in your own SQLite/Postgres.
 
 ## Tech stack
 
@@ -14,7 +14,8 @@ The core concept is a bidirectional knowledge store: not just read-only search, 
 - SQLite (default, embedded via modernc.org/sqlite, pure Go) or Postgres + pgvector (optional, for teams/enterprise)
 - Cobra (CLI framework)
 - Charmbracelet (lipgloss, huh) for terminal UI
-- templ + htmx for web UI (planned)
+- Web UI: stdlib `html/template` + `net/http`, templates and static assets embedded via `embed.FS`
+- Embeddings: Ollama (local, default model `nomic-embed-text`) or OpenAI
 
 ## Development commands
 
@@ -27,9 +28,10 @@ Testing and checks:
 - `just test` -- run all tests
 - `just lint` -- run golangci-lint
 - `just fmt` -- format code
+- `go test ./internal/store/ -run TestSQLiteStore` -- run a single test
 
 Database:
-- `just db-up` -- start dev Postgres (docker compose)
+- `just db-up` -- start dev Postgres (docker compose; dev convenience only, not a deployment target)
 - `just db-down` -- stop dev Postgres
 
 ## Project structure
@@ -40,10 +42,11 @@ cmd/                  -- Cobra commands
   root.go             -- root command, global flags (--config)
   version.go          -- version subcommand
   init.go             -- init wizard (vault detection, config generation)
-  sync.go             -- sync sources and embed chunks
+  sync.go             -- sync sources and embed chunks (batches of 10)
   status.go           -- show system state
   search.go           -- semantic search
-  serve.go            -- MCP and web server launcher
+  serve.go            -- MCP server launcher (--web is still a placeholder)
+  web.go              -- web UI server (the real web entry point)
   db.go               -- db subcommand group (migrate, reset, status)
 internal/
   config/             -- configuration loading (~/.config/ctx/ctx.yaml)
@@ -51,35 +54,34 @@ internal/
     store.go          -- Store interface and model types
     factory.go        -- store.New() factory, StoreWithExtras interface
     sqlite.go         -- SQLiteStore (default, pure Go, brute-force vector search)
-    sqlite_test.go    -- SQLite tests (always run, no external deps)
     postgres.go       -- PostgresStore (pgx/v5 pool, pgvector)
-    postgres_test.go  -- Postgres integration tests (requires running Postgres)
     vector.go         -- cosine similarity, embedding JSON serialization
-    vector_test.go    -- vector math unit tests
     migrations/       -- embedded Postgres SQL migrations
     migrations_sqlite/ -- embedded SQLite SQL migrations
-  search/             -- semantic search engine
-    search.go         -- Engine type, Query/Result types, vector similarity search
-    search_test.go    -- unit tests with mock store and embedder
-  mcp/                -- MCP server for IDE integration
-    server.go         -- server setup, stdio transport via mcp-go
-    tools.go          -- tool definitions and handlers
-    tools_test.go     -- unit tests with mock store and embedder
+  embedder/           -- embedding providers (pluggable)
+    embedder.go       -- Embedder interface, factory by config provider
+    ollama.go         -- Ollama client (local, 600s timeout for slow hardware)
+    openai.go         -- OpenAI client (default text-embedding-3-small)
+  search/             -- semantic search engine (Engine, Query/Result types)
+  mcp/                -- MCP server for IDE integration (mcp-go, stdio)
   provider/           -- source providers (pluggable)
     provider.go       -- Provider interface, SyncStats
     obsidian/         -- Obsidian vault provider
     github/           -- GitHub Issues/PRs provider (via gh CLI)
-docs/
-  decisions/          -- Architecture Decision Records
+  web/                -- web UI server (html/template, embedded assets)
+k8s/                  -- Kustomize manifests (ArgoCD GitOps deployment)
+Dockerfile            -- static binary container image (CGO disabled)
+docs/decisions/       -- Architecture Decision Records (ADR format)
 ```
 
 ## Key conventions
 
 - Config file: `~/.config/ctx/ctx.yaml` (overridable via `--config` flag or `CTX_HOME` env var)
 - Default database: SQLite at `~/.config/ctx/ctx.db` (zero setup). Set `database.url` to a postgres:// URL to use Postgres instead.
-- Environment overrides: `CTX_DATABASE_URL`, `CTX_HOME`, `OPENAI_API_KEY`
+- Environment overrides: `CTX_DATABASE_URL`, `CTX_HOME`, `OLLAMA_HOST`, `OPENAI_API_KEY`
 - Tests use `CTX_HOME` pointed at `t.TempDir()` to isolate state
 - Version info injected via ldflags (`-X main.version=...`)
+- Prior architecture decisions live in `docs/decisions/` -- check them before proposing changes to tech stack or storage
 
 ## Store layer
 
@@ -94,6 +96,21 @@ The `internal/store` package provides the persistence layer with a pluggable bac
 - Model types are plain structs (Source, Document, Chunk, SyncState, IngestEntry)
 - pgvector-go is used for vector embedding types in the Store interface
 - Vector math helpers in `vector.go`: CosineSimilarity, ParseEmbedding, SerializeEmbedding
+
+## Embedding layer
+
+The `internal/embedder` package generates vector embeddings, selected via `embedding.provider` in the config:
+
+- `Embedder` interface: `Embed(ctx, texts) -> [][]float32` plus `Dimensions()`
+- **Ollama** (local, no API key): default model `nomic-embed-text` (768 dims), host via `OLLAMA_HOST` (default `http://localhost:11434`). Client timeout is deliberately long (600s) for slow hardware.
+- **OpenAI**: default model `text-embedding-3-small`, key via `OPENAI_API_KEY`
+- `ctx sync` embeds unembedded chunks in batches of 10 (kept small for slow local hardware)
+
+```yaml
+embedding:
+  provider: ollama  # or openai
+  model: nomic-embed-text
+```
 
 ## Providers
 
@@ -130,7 +147,7 @@ The `internal/search` package provides semantic search over the knowledge store:
 - `ctx status` -- show sources, sync state, document/chunk counts, and embedding stats
 - `ctx search "query"` -- semantic search with `--category`, `--tags`, `--limit` filters
 - `ctx serve --mcp` -- start MCP server on stdio (for Claude Code, Copilot, etc.)
-- `ctx serve --web` -- placeholder for web server
+- `ctx web` -- start the web UI server (`--host`, `--port`, default localhost:8080). Note: `ctx serve --web` is a leftover placeholder; the web UI lives under `ctx web`.
 - `ctx db migrate` -- run pending database migrations
 - `ctx db reset` -- drop all tables and re-run migrations (interactive confirmation, or `--yes` to skip)
 - `ctx db status` -- show applied/pending migrations and table row counts
@@ -157,3 +174,13 @@ Configure in Claude Code (`.claude/mcp.json`):
   }
 }
 ```
+
+## Web UI
+
+The `internal/web` package serves a server-rendered UI (search page, sources page with sync trigger) plus a JSON endpoint at `GET /api/search`. Templates (`templates/*.html`) and static assets are embedded via `embed.FS`; `layout.html` is the shared shell each page template is parsed against.
+
+## Deployment and CI
+
+- `Dockerfile`: two-stage build, `CGO_ENABLED=0` static binary (both DB backends are pure Go), minimal alpine runtime with CA certs. `CTX_HOME=/config`, mount a `ctx.yaml` there.
+- `.github/workflows/build.yml`: on push to main, builds and pushes the image to `ghcr.io/charemma/ctx` (tags `latest` + `sha-<short>`), then a second job commits the new SHA tag into `k8s/kustomization.yaml` via `kustomize edit set image`. The workflow ignores pushes touching only `k8s/**`, `docs/**`, and markdown -- that path filter is the loop-break for the tag-bump commit; keep it intact when editing the workflow.
+- `k8s/`: Kustomize manifests (configmap with `ctx.yaml`, hourly `ctx sync` CronJob). Reconciled onto the k3s cluster by ArgoCD via the GitOps setup in `charemma/platform`. Assumes Postgres and Ollama run as cluster services (`postgres:5432`, `ollama:11434`) and a `ctx-db` secret holds the database URL.
